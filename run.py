@@ -3,11 +3,6 @@ from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from agent import AgenticController
-import mimetypes
-
-# Enforce correct MIME types for production Linux environments (Render)
-mimetypes.add_type('application/javascript', '.js')
-mimetypes.add_type('text/css', '.css')
 
 load_dotenv()
 
@@ -20,6 +15,14 @@ agent_controller = AgenticController()
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/api/firebase-config', methods=['GET'])
+def firebase_config():
+    return jsonify({
+        "apiKey": os.environ.get("FIREBASE_API_KEY", ""),
+        "authDomain": os.environ.get("FIREBASE_AUTH_DOMAIN", ""),
+        "projectId": os.environ.get("FIREBASE_PROJECT_ID", "")
+    })
 
 @app.route('/api/chat', methods=['POST'])
 def chat():

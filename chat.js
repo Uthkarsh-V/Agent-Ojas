@@ -16,45 +16,100 @@ const roleOptions = document.querySelectorAll('.role-option');
 
 const quickBtns = document.querySelectorAll('.quick-btn');
 
-// Login & Greeting Logic
+// ==========================================
+// Authentication & Routing Logic
+// ==========================================
 const loginOverlay = document.getElementById('login-overlay');
-const loginForm = document.getElementById('login-form');
-const usernameInput = document.getElementById('username-input');
 const sidebarGreeting = document.getElementById('sidebar-greeting');
-
-let storedName = localStorage.getItem('ojas_username');
-if (storedName) {
-    loginOverlay.classList.add('hidden');
-    sidebarGreeting.textContent = `Welcome, ${storedName}`;
-}
-
-if(loginForm) {
-    loginForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const name = usernameInput.value.trim();
-        if (name) {
-            localStorage.setItem('ojas_username', name);
-            sidebarGreeting.textContent = `Welcome, ${name}`;
-            loginOverlay.classList.remove('hidden'); // Need this to reset state before hiding
-            setTimeout(() => {
-                loginOverlay.classList.add('hidden');
-            }, 50);
-        }
-    });
-}
-
+const googleLoginBtn = document.getElementById('google-login-btn');
+const githubLoginBtn = document.getElementById('github-login-btn');
+const authLoading = document.getElementById('auth-loading');
+const authErrorMsg = document.getElementById('auth-error-msg');
 const logoutBtn = document.getElementById('logout-btn');
-if(logoutBtn) {
-    logoutBtn.addEventListener('click', () => {
-        localStorage.removeItem('ojas_username');
-        loginOverlay.classList.remove('hidden');
-        usernameInput.value = '';
-    });
-}
+const newChatBtn = document.getElementById('new-chat-btn');
 
 let messageHistory = [];
 let currentModel = 'llama3-8b-8192'; // Default
 let currentPersona = 'ojas'; // Default
+
+// 1. Fetch Firebase Config securely from Flask backend
+async function initFirebase() {
+    try {
+        const response = await fetch('/api/firebase-config');
+        const config = await response.json();
+        
+        if (!config.apiKey || config.apiKey === "") {
+            authErrorMsg.textContent = "Developer Error: Firebase API Keys are missing from the server's .env file. Please add them to enable OAuth.";
+            authErrorMsg.style.display = 'block';
+            return;
+        }
+
+        const app = window.firebaseAppInit(config);
+        const auth = window.firebaseAuth.getAuth(app);
+
+        // 2. Handle Auth State Changes
+        window.firebaseAuth.onAuthStateChanged(auth, (user) => {
+            if (user) {
+                loginOverlay.classList.add('hidden');
+                sidebarGreeting.textContent = `Welcome, ${user.displayName || user.email.split('@')[0]}`;
+            } else {
+                loginOverlay.classList.remove('hidden');
+                sidebarGreeting.textContent = `Ojas Hub`;
+            }
+            authLoading.style.display = 'none';
+        });
+
+        // 3. Login Handlers
+        const handleLogin = async (provider) => {
+            authLoading.style.display = 'block';
+            authErrorMsg.style.display = 'none';
+            try {
+                await window.firebaseAuth.signInWithPopup(auth, provider);
+            } catch (error) {
+                console.error("Auth error:", error);
+                authErrorMsg.textContent = error.message;
+                authErrorMsg.style.display = 'block';
+                authLoading.style.display = 'none';
+            }
+        };
+
+        if (googleLoginBtn) {
+            googleLoginBtn.addEventListener('click', () => handleLogin(new window.firebaseAuth.GoogleAuthProvider()));
+        }
+        if (githubLoginBtn) {
+            githubLoginBtn.addEventListener('click', () => handleLogin(new window.firebaseAuth.GithubAuthProvider()));
+        }
+
+        // 4. Logout Handler
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                window.firebaseAuth.signOut(auth);
+            });
+        }
+    } catch (err) {
+        console.error("Failed to initialize Firebase:", err);
+    }
+}
+
+// Start Firebase Auth Flow
+initFirebase();
+
+// 5. New Chat Handler
+if (newChatBtn) {
+    newChatBtn.addEventListener('click', () => {
+        // Clear message history array (wipes AI memory)
+        messageHistory = [];
+        
+        // Clear DOM and reset greeting
+        chatMessages.innerHTML = `
+            <div class="message ai-message initial">
+                <div class="message-content">
+                    Core systems online. Memory cleared. Awaiting new input sequence...
+                </div>
+            </div>
+        `;
+    });
+}
 
 // Auto-resize textarea
 chatInput.addEventListener('input', function() {
